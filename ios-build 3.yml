@@ -1,0 +1,38 @@
+name: Build iOS App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Debug – list files
+        run: |
+          echo "Repo root:"
+          ls -la
+          echo "SmartwatchApp:"
+          ls -la SmartwatchApp || true
+          echo "Project bundle:"
+          ls -la SmartwatchApp/SmartwatchApp.xcodeproj || true
+
+      - name: Build (archive)
+        run: |
+          mkdir -p output
+          xcodebuild             -project SmartwatchApp/SmartwatchApp.xcodeproj             -scheme SmartwatchApp             -configuration Release             -sdk iphoneos             -archivePath output/App.xcarchive             clean archive
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive             -archivePath output/App.xcarchive             -exportPath output             -exportOptionsPlist SmartwatchApp/ExportOptions.plist
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartwatch-app
+          path: output/*.ipa
