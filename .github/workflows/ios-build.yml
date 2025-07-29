@@ -13,16 +13,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      
+      - name: Set up Xcode 16
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0' 
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
       - name: Debug – list files
         run: |
-          echo "Repo root:"
-          ls -la
-          echo "./SmartwatchApp:"
-          ls -la SmartwatchApp || true
-          echo "./SmartwatchApp/SmartwatchApp:"
-          ls -la SmartwatchApp/SmartwatchApp || true
-          echo "Project bundle:"
-          ls -la SmartwatchApp/SmartwatchApp/SmartwatchApp.xcodeproj || true
+          echo "Repo root:" && ls -la
+          echo "./SmartwatchApp:" && ls -la SmartwatchApp || true
+          echo "./SmartwatchApp/SmartwatchApp:" && ls -la SmartwatchApp/SmartwatchApp || true
+          echo "Project bundle:" && ls -la SmartwatchApp/SmartwatchApp/SmartwatchApp.xcodeproj || true
 
       - name: Build (archive) with xcodebuild
         run: |
