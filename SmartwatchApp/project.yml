@@ -1,24 +1,21 @@
 name: SmartwatchApp
 
-# Global (base) build settings
 settings:
   base:
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     SWIFT_VERSION: "5.9"
 
-# The iOS app target
 targets:
   SmartwatchApp:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
+    bundleId: com.YourOrg.SmartwatchApp   # <-- ADD THIS LINE
     sources:
-      # This includes all app sources already in SmartwatchApp/
       - path: SmartwatchApp
     info:
       path: SmartwatchApp/Info.plist
 
-# Create a shared scheme named "SmartwatchApp"
 schemes:
   SmartwatchApp:
     shared: true
