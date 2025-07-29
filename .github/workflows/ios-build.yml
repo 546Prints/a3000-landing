@@ -2,39 +2,45 @@ name: Build iOS App
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: 3.2
+      - name: Debug – list files
+        run: |
+          echo "Repo root:"
+          ls -la
+          echo "./SmartwatchApp:"
+          ls -la SmartwatchApp || true
+          echo "./SmartwatchApp/SmartwatchApp:"
+          ls -la SmartwatchApp/SmartwatchApp || true
+          echo "Project bundle:"
+          ls -la SmartwatchApp/SmartwatchApp/SmartwatchApp.xcodeproj || true
 
-      - name: Set up Xcode project
+      - name: Build (archive) with xcodebuild
         run: |
           mkdir -p output
+          xcodebuild \
+            -project SmartwatchApp/SmartwatchApp/SmartwatchApp.xcodeproj \
+            -scheme SmartwatchApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath output/App.xcarchive \
+            clean archive
 
-      - name: Build .ipa with xcodebuild
+      - name: Export IPA
         run: |
-          xcodebuild -project SmartwatchApp_XcodeProj.xcodeproj \
-                     -scheme SmartwatchApp_XcodeProj \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     -archivePath output/App.xcarchive \
-                     archive
-
           xcodebuild -exportArchive \
-                     -archivePath output/App.xcarchive \
-                     -exportPath output \
-                     -exportOptionsPlist ExportOptions.plist
+            -archivePath output/App.xcarchive \
+            -exportPath output \
+            -exportOptionsPlist SmartwatchApp/SmartwatchApp/ExportOptions.plist
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
