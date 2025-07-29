@@ -1,45 +1,4 @@
-name: Build iOS App
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Use a recent Xcode
-      - name: Set up Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '16.2'   # ok for iOS 18 SDKs; we will generate a matching .xcodeproj
-
-      - name: Show Xcode version
-        run: xcodebuild -version
-
-      - name: Debug – list files
-        run: |
-          echo "Repo root:" && ls -la
-          echo "./SmartwatchApp:" && ls -la SmartwatchApp || true
-
-      # --- Generate a fresh .xcodeproj that matches this runner's Xcode ---
-      - name: Install XcodeGen
-        run: |
-          brew update
-          brew install xcodegen
-
-      - name: Generate Xcode project from project.yml
-        run: |
-          test -f SmartwatchApp/project.yml
-          xcodegen generate --spec SmartwatchApp/project.yml --project SmartwatchApp
-
-      # --- Build & Archive ---
-      - name: Build (archive) with xcodebuild
+      - name: Build (archive) WITHOUT code signing
         run: |
           mkdir -p output
           xcodebuild \
@@ -48,39 +7,26 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -archivePath output/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
             clean archive
 
-      # Pick ExportOptions.plist from whichever path you have it in
-      - name: Export IPA
+      - name: Create unsigned IPA manually
         run: |
-          EXP="SmartwatchApp/ExportOptions.plist"
-          if [ ! -f "$EXP" ] && [ -f "SmartwatchApp/SmartwatchApp/ExportOptions.plist" ]; then
-            EXP="SmartwatchApp/SmartwatchApp/ExportOptions.plist"
+          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "App not found at $APP_PATH"; exit 1
           fi
-          if [ ! -f "$EXP" ]; then
-            echo "ExportOptions.plist not found – creating a simple development one."
-            cat > SmartwatchApp/ExportOptions.plist <<'PLIST'
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>method</key><string>development</string>
-              <key>destination</key><string>export</string>
-              <key>compileBitcode</key><false/>
-              <key>signingStyle</key><string>automatic</string>
-            </dict>
-            </plist>
-            PLIST
-            EXP="SmartwatchApp/ExportOptions.plist"
-          fi
-
-          xcodebuild -exportArchive \
-            -archivePath output/App.xcarchive \
-            -exportPath output \
-            -exportOptionsPlist "$EXP"
+          rm -rf Payload && mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          cd Payload
+          zip -r ../SmartwatchApp-unsigned.ipa . -q
+          cd ..
+          ls -la output || true
+          mv SmartwatchApp-unsigned.ipa output/
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: smartwatch-app
-          path: output/*.ipa
+          name: smartwatch-app-unsigned
+          path: output/SmartwatchApp-unsigned.ipa
