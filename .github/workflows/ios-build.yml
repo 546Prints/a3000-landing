@@ -7,52 +7,26 @@ on:
 
 jobs:
   build:
-    # macos-14 runners have Xcode 16.x available
-    runs-on: macos-14
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Prefer Xcode 16.2, fall back to 15.4 if needed
       - name: Select Xcode (prefer 16.2, fallback 15.4)
-        shell: bash
-        run: |
-          set -e
-          if [ -d "/Applications/Xcode_16.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.2.app
-          elif [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app
-          fi
-          xcodebuild -version
-          xcodebuild -showsdks
+        run: sudo xcode-select -s "/Applications/Xcode_16.2.app" || sudo xcode-select -s "/Applications/Xcode_15.4.app"
 
-      # Handy visibility when troubleshooting
       - name: Debug – list files
         run: ls -R
 
-      # Show what Info.plist and build settings say for the bundle id
       - name: Debug – show bundle id values
-        shell: bash
         run: |
-          set -e
-          if [ -f SmartwatchApp/Info.plist ]; then
-            echo "---- Info.plist ----"
-            plutil -p SmartwatchApp/Info.plist | grep -n CFBundleIdentifier || true
-          else
-            echo "SmartwatchApp/Info.plist not found"
-          fi
-          echo "---- xcodebuild build settings (PRODUCT_BUNDLE_IDENTIFIER) ----"
-          xcodebuild -project SmartwatchApp/SmartwatchApp.xcodeproj \
-                     -scheme SmartwatchApp -showBuildSettings \
-                     | grep PRODUCT_BUNDLE_IDENTIFIER || true
+          echo "Using PRODUCT_BUNDLE_IDENTIFIER = com.546prints.smartwatchapp"
+          echo "INFOPLIST_FILE = SmartwatchApp/Info.plist"
 
-      # Build an archive WITHOUT code signing and force a bundle id
       - name: Build (archive) WITHOUT code signing
-        shell: bash
         run: |
           set -e
-          mkdir -p output
           xcodebuild \
             -project SmartwatchApp/SmartwatchApp.xcodeproj \
             -scheme SmartwatchApp \
@@ -64,24 +38,13 @@ jobs:
             -archivePath output/App.xcarchive \
             clean archive
 
-      # Create an unsigned .ipa from the .xcarchive
       - name: Create unsigned IPA
-        shell: bash
         run: |
-          set -e
-          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "App not found at $APP_PATH"
-            ls -R output || true
-            exit 1
-          fi
-          mkdir -p output/Payload
-          cp -R "$APP_PATH" output/Payload/
-          (cd output && /usr/bin/zip -r SmartwatchApp-unsigned.ipa Payload)
+          mkdir -p output
+          xcodebuild -exportArchive -archivePath output/App.xcarchive -exportPath output -exportOptionsPlist ExportOptions.plist
 
-      # Upload the IPA so you can download it from the run artifacts
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartwatchApp-unsigned
+          name: SmartwatchApp
           path: output/*.ipa
