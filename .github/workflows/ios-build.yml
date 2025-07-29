@@ -7,31 +7,30 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Ruby
+      - name: Set up Ruby 3.2
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 2.7
+          ruby-version: 3.2
 
-      - name: Install fastlane
+      - name: Install Fastlane
         run: gem install fastlane
 
       - name: Install CocoaPods dependencies
-        run: |
-          gem install cocoapods
-          pod install || true
-        working-directory: .
+        run: pod install
+        working-directory: ./SmartwatchApp
 
       - name: Build IPA with Fastlane
         run: fastlane build
+        working-directory: ./SmartwatchApp
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: MyApp.ipa
-          path: ./build/*.ipa
+          name: smartwatch-app
+          path: SmartwatchApp/output/*.ipa
