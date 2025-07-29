@@ -1,1 +1,1 @@
-// Placeholder for AppDelegate.swift
+// Placeholder AppDelegate.swift
