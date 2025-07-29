@@ -1,0 +1,16 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build the iOS app"
+  lane :build do
+    build_app(
+      scheme: "SmartwatchApp_XcodeProj", # Replace with your actual scheme name if different
+      export_method: "ad-hoc",            # Or "development" / "app-store" if needed
+      export_options: {
+        provisioningProfiles: {
+          "com.your.bundle.id" => "match AdHoc com.your.bundle.id" # Replace with your actual bundle ID
+        }
+      }
+    )
+  end
+end
