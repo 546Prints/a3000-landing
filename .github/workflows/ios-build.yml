@@ -22,17 +22,13 @@ jobs:
         run: gem install fastlane
 
       - name: Install CocoaPods dependencies
-        run: |
-          cd SmartwatchApp
-          pod install
+        run: pod install
 
       - name: Build IPA with Fastlane
-        run: |
-          cd SmartwatchApp
-          fastlane build
+        run: fastlane build
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: smartwatch-app
-          path: SmartwatchApp/output/*.ipa
+          path: output/*.ipa
