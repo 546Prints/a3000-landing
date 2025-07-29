@@ -1,21 +1,31 @@
 name: SmartwatchApp
 
-options:
-  deploymentTarget:
-    iOS: "15.0"
+# Global (base) build settings
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    SWIFT_VERSION: "5.9"
 
+# The iOS app target
 targets:
   SmartwatchApp:
     type: application
     platform: iOS
+    deploymentTarget: "16.0"
     sources:
+      # This includes all app sources already in SmartwatchApp/
       - path: SmartwatchApp
     info:
       path: SmartwatchApp/Info.plist
-    settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.a3000.smartwatch
-      DEVELOPMENT_TEAM: ""
-      SWIFT_VERSION: 5.0
-      TARGETED_DEVICE_FAMILY: "1"   # iPhone
-      CODE_SIGN_STYLE: Automatic
-      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+
+# Create a shared scheme named "SmartwatchApp"
+schemes:
+  SmartwatchApp:
+    shared: true
+    build:
+      targets:
+        SmartwatchApp: all
+    run:
+      config: Release
+    archive:
+      config: Release
