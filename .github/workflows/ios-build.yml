@@ -13,11 +13,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      
-      - name: Set up Xcode 16
+      # Use a recent Xcode
+      - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.2' 
+          xcode-version: '16.2'   # ok for iOS 18 SDKs; we will generate a matching .xcodeproj
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -26,26 +26,58 @@ jobs:
         run: |
           echo "Repo root:" && ls -la
           echo "./SmartwatchApp:" && ls -la SmartwatchApp || true
-          echo "./SmartwatchApp/SmartwatchApp:" && ls -la SmartwatchApp/SmartwatchApp || true
-          echo "Project bundle:" && ls -la SmartwatchApp/SmartwatchApp/SmartwatchApp.xcodeproj || true
 
+      # --- Generate a fresh .xcodeproj that matches this runner's Xcode ---
+      - name: Install XcodeGen
+        run: |
+          brew update
+          brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: |
+          test -f SmartwatchApp/project.yml
+          xcodegen generate --spec SmartwatchApp/project.yml --project SmartwatchApp
+
+      # --- Build & Archive ---
       - name: Build (archive) with xcodebuild
         run: |
           mkdir -p output
           xcodebuild \
-            -project SmartwatchApp/SmartwatchApp/SmartwatchApp.xcodeproj \
+            -project SmartwatchApp/SmartwatchApp.xcodeproj \
             -scheme SmartwatchApp \
             -configuration Release \
             -sdk iphoneos \
             -archivePath output/App.xcarchive \
             clean archive
 
+      # Pick ExportOptions.plist from whichever path you have it in
       - name: Export IPA
         run: |
+          EXP="SmartwatchApp/ExportOptions.plist"
+          if [ ! -f "$EXP" ] && [ -f "SmartwatchApp/SmartwatchApp/ExportOptions.plist" ]; then
+            EXP="SmartwatchApp/SmartwatchApp/ExportOptions.plist"
+          fi
+          if [ ! -f "$EXP" ]; then
+            echo "ExportOptions.plist not found – creating a simple development one."
+            cat > SmartwatchApp/ExportOptions.plist <<'PLIST'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>method</key><string>development</string>
+              <key>destination</key><string>export</string>
+              <key>compileBitcode</key><false/>
+              <key>signingStyle</key><string>automatic</string>
+            </dict>
+            </plist>
+            PLIST
+            EXP="SmartwatchApp/ExportOptions.plist"
+          fi
+
           xcodebuild -exportArchive \
             -archivePath output/App.xcarchive \
             -exportPath output \
-            -exportOptionsPlist SmartwatchApp/SmartwatchApp/ExportOptions.plist
+            -exportOptionsPlist "$EXP"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
