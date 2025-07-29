@@ -1,69 +1,86 @@
-name: Build iOS App (unsigned)
+name: Build iOS App
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-13
+    # Use macOS 14 so Homebrew + XcodeGen + Xcode 16.x work smoothly
+    runs-on: macos-14
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Prefer Xcode 16.2, fall back to 15.4 if not available
       - name: Select Xcode (prefer 16.2, fallback 15.4)
-        shell: bash
         run: |
+          set -e
           if [ -d "/Applications/Xcode_16.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+            /usr/bin/xcodebuild -version
           elif [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+            sudo xcode-select -s /Applications/Xcode_15.4.app
+            /usr/bin/xcodebuild -version
+          else
+            echo "Neither Xcode 16.2 nor 15.4 is installed on this runner." >&2
+            exit 1
           fi
-          xcodebuild -version
 
+      # (Optional) quick sanity check of files
       - name: Debug – list files
-        shell: bash
         run: |
-          pwd
+          echo "Root:"
           ls -la
-          echo "----- tree: SmartwatchApp -----"
-          ls -R SmartwatchApp || true
-      - name: List Xcode targets & schemes
+          echo "SmartwatchApp/:"
+          ls -la SmartwatchApp || true
+
+      # ---- Generate a fresh .xcodeproj with XcodeGen ----
+      - name: Install XcodeGen
         run: |
-         echo "=== xcodebuild -list (project) ==="
-         xcodebuild -list -project SmartwatchApp/SmartwatchApp.xcodeproj
-         echo "=== List shared xcscheme files ==="
-         find SmartwatchApp/SmartwatchApp.xcodeproj -path "*/xcshareddata/xcschemes/*.xcscheme" -print || true
-      # ---- Build & Archive (NO code signing) ----
+          brew update
+          brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: |
+          test -f SmartwatchApp/project.yml
+          # XcodeGen will create SmartwatchApp.xcodeproj in the repo root by default;
+          # we want it inside SmartwatchApp/, so run it from there.
+          pushd SmartwatchApp
+          xcodegen generate
+          popd
+          echo "Generated files:"
+          ls -R SmartwatchApp/SmartwatchApp.xcodeproj
+
+      # ---- Build & Archive (no signing) ----
       - name: Build (archive) WITHOUT code signing
-        shell: bash
         run: |
           mkdir -p output
           xcodebuild \
             -project SmartwatchApp/SmartwatchApp.xcodeproj \
             -scheme SmartwatchApp \
             -configuration Release \
-            -sdk iphoneos \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
+            -sdk iphonesimulator \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             -archivePath output/App.xcarchive \
             clean archive
 
+      # ---- Create unsigned IPA manually (no codesign) ----
       - name: Create unsigned IPA
-        shell: bash
         run: |
+          set -e
           APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
           if [ ! -d "$APP_PATH" ]; then
-            echo "App bundle not found at: $APP_PATH"
+            echo "Expected app not found at $APP_PATH"
+            ls -R output || true
             exit 1
           fi
-          rm -rf Payload
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          /usr/bin/zip -qry SmartwatchApp-unsigned.ipa Payload
+          cd Payload && zip -r ../SmartwatchApp-unsigned.ipa . && cd ..
+          echo "IPA created at SmartwatchApp-unsigned.ipa"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
