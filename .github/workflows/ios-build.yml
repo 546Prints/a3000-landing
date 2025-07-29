@@ -30,7 +30,12 @@ jobs:
           ls -la
           echo "----- tree: SmartwatchApp -----"
           ls -R SmartwatchApp || true
-
+      - name: List Xcode targets & schemes
+        run: |
+         echo "=== xcodebuild -list (project) ==="
+         xcodebuild -list -project SmartwatchApp/SmartwatchApp.xcodeproj
+         echo "=== List shared xcscheme files ==="
+         find SmartwatchApp/SmartwatchApp.xcodeproj -path "*/xcshareddata/xcschemes/*.xcscheme" -print || true
       # ---- Build & Archive (NO code signing) ----
       - name: Build (archive) WITHOUT code signing
         shell: bash
