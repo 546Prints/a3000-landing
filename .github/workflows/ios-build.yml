@@ -1,4 +1,45 @@
-      - name: Build (archive) WITHOUT code signing
+name: Build iOS App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Use a recent Xcode
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'   # ok for iOS 18 SDKs; we will generate a matching .xcodeproj
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Debug – list files
+        run: |
+          echo "Repo root:" && ls -la
+          echo "./SmartwatchApp:" && ls -la SmartwatchApp || true
+
+      # --- Generate a fresh .xcodeproj that matches this runner's Xcode ---
+      - name: Install XcodeGen
+        run: |
+          brew update
+          brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: |
+          test -f SmartwatchApp/project.yml
+          xcodegen generate --spec SmartwatchApp/project.yml --project SmartwatchApp
+
+      # --- Build & Archive ---
+       - name: Build (archive) WITHOUT code signing
         run: |
           mkdir -p output
           xcodebuild \
@@ -30,3 +71,37 @@
         with:
           name: smartwatch-app-unsigned
           path: output/SmartwatchApp-unsigned.ipa
+      # Pick ExportOptions.plist from whichever path you have it in
+      - name: Export IPA
+        run: |
+          EXP="SmartwatchApp/ExportOptions.plist"
+          if [ ! -f "$EXP" ] && [ -f "SmartwatchApp/SmartwatchApp/ExportOptions.plist" ]; then
+            EXP="SmartwatchApp/SmartwatchApp/ExportOptions.plist"
+          fi
+          if [ ! -f "$EXP" ]; then
+            echo "ExportOptions.plist not found – creating a simple development one."
+            cat > SmartwatchApp/ExportOptions.plist <<'PLIST'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>method</key><string>development</string>
+              <key>destination</key><string>export</string>
+              <key>compileBitcode</key><false/>
+              <key>signingStyle</key><string>automatic</string>
+            </dict>
+            </plist>
+            PLIST
+            EXP="SmartwatchApp/ExportOptions.plist"
+          fi
+
+          xcodebuild -exportArchive \
+            -archivePath output/App.xcarchive \
+            -exportPath output \
+            -exportOptionsPlist "$EXP"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartwatch-app
+          path: output/*.ipa
