@@ -1,0 +1,21 @@
+name: SmartwatchApp
+
+options:
+  deploymentTarget:
+    iOS: "15.0"
+
+targets:
+  SmartwatchApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: SmartwatchApp
+    info:
+      path: SmartwatchApp/Info.plist
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.a3000.smartwatch
+      DEVELOPMENT_TEAM: ""
+      SWIFT_VERSION: 5.0
+      TARGETED_DEVICE_FAMILY: "1"   # iPhone
+      CODE_SIGN_STYLE: Automatic
+      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
