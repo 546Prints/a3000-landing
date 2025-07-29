@@ -1,1 +1,12 @@
 
+// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {};
+  objectVersion = 52;
+  objects = {
+    /* Begin PBXProject section */
+    /* This is a simplified placeholder */
+  };
+  rootObject = PROJECT_ID;
+}
