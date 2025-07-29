@@ -10,21 +10,33 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Ruby 3.2
+      - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.2
 
-      - name: Install Fastlane
-        run: gem install fastlane
+      - name: Set up Xcode project
+        run: |
+          mkdir -p output
 
-      - name: Build IPA with Fastlane
-        run: fastlane build
+      - name: Build .ipa with xcodebuild
+        run: |
+          xcodebuild -project SmartwatchApp_XcodeProj.xcodeproj \
+                     -scheme SmartwatchApp_XcodeProj \
+                     -sdk iphoneos \
+                     -configuration Release \
+                     -archivePath output/App.xcarchive \
+                     archive
 
-      - name: Upload IPA
+          xcodebuild -exportArchive \
+                     -archivePath output/App.xcarchive \
+                     -exportPath output \
+                     -exportOptionsPlist ExportOptions.plist
+
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: smartwatch-app
