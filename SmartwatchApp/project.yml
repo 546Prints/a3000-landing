@@ -10,19 +10,8 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
-    bundleId: com.YourOrg.SmartwatchApp   # <-- ADD THIS LINE
+    bundleId: com.546prints.smartwatchapp      # <— ADD/KEEP THIS
     sources:
       - path: SmartwatchApp
     info:
       path: SmartwatchApp/Info.plist
-
-schemes:
-  SmartwatchApp:
-    shared: true
-    build:
-      targets:
-        SmartwatchApp: all
-    run:
-      config: Release
-    archive:
-      config: Release
