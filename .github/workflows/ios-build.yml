@@ -24,26 +24,14 @@ jobs:
           xcodebuild -version
 
       - name: Debug – list files
+        shell: bash
         run: |
           pwd
           ls -la
-          echo "----- tree -----"
+          echo "----- tree: SmartwatchApp -----"
           ls -R SmartwatchApp || true
 
-      # Optional: only runs if you add SmartwatchApp/project.yml later
-      - name: Install XcodeGen (optional)
-        run: |
-          brew update
-          brew install xcodegen
-      - name: Generate Xcode project from project.yml (optional)
-        working-directory: SmartwatchApp
-        run: |
-          if [ -f project.yml ]; then
-            xcodegen generate --spec project.yml
-          else
-            echo "No project.yml found; using existing .xcodeproj"
-          fi
-
+      # ---- Build & Archive (NO code signing) ----
       - name: Build (archive) WITHOUT code signing
         shell: bash
         run: |
