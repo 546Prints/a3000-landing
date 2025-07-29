@@ -1,3 +1,1 @@
-import UIKit
-@UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {}
+// Placeholder for AppDelegate.swift
