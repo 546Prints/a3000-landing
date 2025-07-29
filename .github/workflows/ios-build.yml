@@ -23,7 +23,7 @@ jobs:
 
       - name: Build the app
         run: |
-          xcodebuild -scheme SmartwatchApp -project SmartwatchApp.xcodeproj \
+          xcodebuild -scheme SmartwatchApp -project A3000WatchFace.xcodeproj \
             -configuration Release -sdk iphoneos \
             -archivePath ${{ github.workspace }}/build/SmartwatchApp.xcarchive \
             archive
