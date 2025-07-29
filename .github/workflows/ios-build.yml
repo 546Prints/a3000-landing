@@ -39,7 +39,7 @@ jobs:
           xcodegen generate --spec SmartwatchApp/project.yml --project SmartwatchApp
 
       # --- Build & Archive ---
-       - name: Build (archive) WITHOUT code signing
+       - name: Build (archive) WITHOUT code signing 
         run: |
           mkdir -p output
           xcodebuild \
