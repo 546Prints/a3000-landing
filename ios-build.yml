@@ -1,0 +1,40 @@
+name: Build iOS App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app || true
+
+      - name: Install dependencies
+        run: |
+          sudo gem install cocoapods || true
+
+      - name: Build .ipa file
+        run: |
+          xcodebuild -project SmartwatchApp_XcodeProject.xcodeproj \
+            -scheme SmartwatchApp \
+            -sdk iphoneos \
+            -configuration Release \
+            archive -archivePath $PWD/build/SmartwatchApp.xcarchive
+
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/SmartwatchApp.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $PWD/build
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartwatchApp.ipa
+          path: build/*.ipa
