@@ -62,11 +62,10 @@ jobs:
             -project SmartwatchApp/SmartwatchApp.xcodeproj \
             -scheme SmartwatchApp \
             -configuration Release \
-            -sdk iphonesimulator \
+            -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             -archivePath output/App.xcarchive \
             clean archive
-
       # ---- Create unsigned IPA manually (no codesign) ----
       - name: Create unsigned IPA
         run: |
