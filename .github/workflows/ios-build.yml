@@ -23,15 +23,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode (prefer 16.2, fallback 15.4)
+      - name: Select Xcode (prefer 16.2, fallback 15.4, else newest)
+        shell: bash
         run: |
-          if [ -d "/Applications/Xcode_16.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.2.app
-          else
-            sudo xcode-select -s /Applications/Xcode_15.4.app
-          fi
-          xcodebuild -version
+          set -e
+          echo "Available Xcodes:"
+          ls -1 /Applications | grep -E '^Xcode' || true
 
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            DEVELOPER_DIR="/Applications/Xcode_16.2.app/Contents/Developer"
+          elif [ -d "/Applications/Xcode_15.4.app" ]; then
+            DEVELOPER_DIR="/Applications/Xcode_15.4.app/Contents/Developer"
+          else
+            # Pick the newest Xcode installed on the image
+            LATEST_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -n1)"
+            DEVELOPER_DIR="$LATEST_APP/Contents/Developer"
+          fi
+
+          echo "Selecting: $DEVELOPER_DIR"
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          xcode-select -p
+          xcodebuild -version
       # ---------- Install signing assets (certificate + profile) ----------
       - name: Create keychain and import .p12
         shell: bash
