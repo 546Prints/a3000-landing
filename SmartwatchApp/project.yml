@@ -1,76 +1,32 @@
-name: Build iOS App (unsigned)
+name: SmartwatchApp
+options:
+  minimumXcodeGenVersion: 2.37.0
+  deploymentTarget:
+    iOS: "15.0"
 
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: com.546prints.smartwatchapp
+    INFOPLIST_FILE: SmartwatchApp/Resources/Info.plist
+    SWIFT_VERSION: 5.9
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
 
-jobs:
-  build:
-    name: Build (archive) WITHOUT code signing
-    runs-on: macos-13  # macOS 13 image supports multiple Xcode versions
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Select Xcode (prefer 16.2, fallback 15.4)
-        run: |
-          if [ -d "/Applications/Xcode_16.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-          else
-            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-          fi
-          xcodebuild -version
-
-      - name: Install XcodeGen
-        run: |
-          brew update
-          brew install xcodegen
-
-      - name: Generate Xcode project from project.yml
-        run: |
-          test -f SmartwatchApp/project.yml
-          xcodegen generate --spec SmartwatchApp/project.yml
-
-      - name: Debug — list files
-        run: |
-          pwd
-          ls -la
-          echo "---- SmartwatchApp dir ----"
-          ls -la SmartwatchApp
-
-      - name: Build (archive) WITHOUT code signing
-        run: |
-          set -e
-          mkdir -p output
-          xcodebuild \
-            -project SmartwatchApp/SmartwatchApp.xcodeproj \
-            -scheme SmartwatchApp \
-            -configuration Release \
-            -sdk iphoneos \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            clean archive \
-            -archivePath output/App.xcarchive
-
-      - name: Create unsigned IPA
-        run: |
-          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "App not found at $APP_PATH"
-            exit 1
-          fi
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist" || true
-          mkdir -p payload
-          cp -R "$APP_PATH" payload/
-          cd payload
-          /usr/bin/zip -qry ../SmartwatchApp-unsigned.ipa .
-          cd ..
-
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SmartwatchApp-unsigned
-          path: SmartwatchApp-unsigned.ipa
-          if-no-files-found: error
+targets:
+  SmartwatchApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: SmartwatchApp/Sources
+    resources:
+      - path: SmartwatchApp/Resources
+    settings:
+      base:
+        PRODUCT_NAME: SmartwatchApp
+        INFOPLIST_FILE: SmartwatchApp/Resources/Info.plist
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        PROVISIONING_PROFILE_SPECIFIER: ""
+    scheme:
+      name: SmartwatchApp
+      testTargets: []
