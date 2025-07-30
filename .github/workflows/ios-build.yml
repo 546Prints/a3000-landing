@@ -2,36 +2,24 @@ name: Build iOS App (unsigned)
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches:
+      - main
 
 jobs:
   build:
-    runs-on: macos-latest
-
-    env:
-      # Adjust these only if you rename things
-      APP_SCHEME: SmartwatchApp
-      APP_PROJECT: SmartwatchApp/SmartwatchApp.xcodeproj
-      APP_BUNDLE_ID: com.546prints.smartwatchapp
-      APP_INFO_PLIST: SmartwatchApp/Resources/Info.plist
+    runs-on: macos-14
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Select Xcode (prefer 16.2, fallback 15.4)
+        shell: bash
         run: |
-          set -e
           if [ -d "/Applications/Xcode_16.2.app" ]; then
             sudo xcode-select -s /Applications/Xcode_16.2.app
-            echo "Using Xcode 16.2"
-          elif [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app
-            echo "Using Xcode 15.4"
           else
-            echo "Using default Xcode:"
-            xcode-select -p
+            sudo xcode-select -s /Applications/Xcode_15.4.app
           fi
           xcodebuild -version
 
@@ -39,12 +27,8 @@ jobs:
         run: |
           pwd
           ls -la
-          echo "---- SmartwatchApp ----"
-          ls -la SmartwatchApp || true
-          echo "---- Sources ----"
-          ls -la SmartwatchApp/Sources || true
-          echo "---- Resources ----"
-          ls -la SmartwatchApp/Resources || true
+          echo "----- SmartwatchApp dir -----"
+          ls -la SmartwatchApp
 
       - name: Install XcodeGen
         run: |
@@ -53,46 +37,48 @@ jobs:
 
       - name: Debug — show project.yml
         run: |
-          test -f SmartwatchApp/project.yml || (echo "SmartwatchApp/project.yml missing" && exit 1)
-          sed -n '1,200p' SmartwatchApp/project.yml
+          cat SmartwatchApp/project.yml || true
 
       - name: Generate Xcode project from project.yml
         run: |
+          test -f SmartwatchApp/project.yml
           xcodegen generate --spec SmartwatchApp/project.yml
-          ls -la SmartwatchApp/SmartwatchApp.xcodeproj
 
       - name: Build (archive) WITHOUT code signing
         run: |
           set -e
           mkdir -p output
           xcodebuild \
-            -project "$APP_PROJECT" \
-            -scheme "$APP_SCHEME" \
+            -project SmartwatchApp/SmartwatchApp.xcodeproj \
+            -scheme SmartwatchApp \
             -configuration Release \
             -sdk iphoneos \
-            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
-            
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            -destination 'generic/platform=iOS' \
+            PRODUCT_BUNDLE_IDENTIFIER=com.546prints.smartwatchapp \
+            INFOPLIST_FILE=Resources/Info.plist \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             -archivePath output/App.xcarchive \
             clean archive
 
       - name: Create unsigned IPA
         run: |
           set -e
-          APP_PATH="output/App.xcarchive/Products/Applications/${APP_SCHEME}.app"
+          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "App not found at $APP_PATH"
-            find output -maxdepth 4 -type d -print
             exit 1
           fi
-          mkdir -p Payload
-          cp -R "$APP_PATH" Payload/
-          /usr/bin/zip -qry SmartwatchApp-unsigned.ipa Payload
-          rm -rf Payload
+          mkdir -p output/Payload
+          cp -R "$APP_PATH" output/Payload/
+          (cd output && zip -r SmartwatchApp-unsigned.ipa Payload)
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: SmartwatchApp-unsigned
-          path: SmartwatchApp-unsigned.ipa
-          if-no-files-found: error
+          path: output/SmartwatchApp-unsigned.ipa
