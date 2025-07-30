@@ -4,8 +4,24 @@ workflows:
     max_build_duration: 60
     environment:
       xcode: 16.2
+
     scripts:
-      - name: Build archive without signing
+      - name: Debug — show files
+        script: |
+          set -e
+          echo "PWD: $(pwd)"
+          ls -la
+          echo "---- SmartwatchApp dir ----"
+          ls -la SmartwatchApp || true
+          echo "---- SmartwatchApp recursive ----"
+          ls -R SmartwatchApp || true
+
+      - name: List Xcode targets & schemes
+        script: |
+          set -e
+          xcodebuild -list -project SmartwatchApp/SmartwatchApp.xcodeproj
+
+      - name: Build archive WITHOUT code signing
         script: |
           set -e
           xcodebuild \
@@ -15,26 +31,19 @@ workflows:
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             archive -archivePath $CM_BUILD_DIR/App.xcarchive
-      - name: Export unsigned IPA
+
+      - name: Package .app (unsigned) as zip
         script: |
           set -e
-          cat > ExportOptions.plist <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>ad-hoc</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>stripSwiftSymbols</key><true/>
-            <key>compileBitcode</key><false/>
-          </dict>
-          </plist>
-          EOF
-          # Try export; allow it to continue even if export fails due to unsigned archive
-          xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/App.xcarchive \
-            -exportPath $CM_BUILD_DIR/ipa \
-            -exportOptionsPlist ExportOptions.plist || true
+          APP="$CM_BUILD_DIR/App.xcarchive/Products/Applications/SmartwatchApp.app"
+          if [ -d "$APP" ]; then
+            cd "$(dirname "$APP")"
+            zip -r "$CM_ARTIFACTS/SmartwatchApp-unsigned-app.zip" "SmartwatchApp.app"
+          else
+            echo "App bundle not found at $APP"
+            exit 1
+          fi
+
     artifacts:
-      - $CM_BUILD_DIR/ipa/*.ipa
-      - ipa/*.ipa
+      - $CM_BUILD_DIR/App.xcarchive
+      - $CM_ARTIFACTS/SmartwatchApp-unsigned-app.zip
