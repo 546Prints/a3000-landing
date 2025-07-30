@@ -3,38 +3,49 @@ name: Build iOS App (unsigned)
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
 
+    env:
+      # Adjust these only if you rename things
+      APP_SCHEME: SmartwatchApp
+      APP_PROJECT: SmartwatchApp/SmartwatchApp.xcodeproj
+      APP_BUNDLE_ID: com.546prints.smartwatchapp
+      APP_INFO_PLIST: SmartwatchApp/Resources/Info.plist
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Prefer Xcode 16.2; fall back to 15.4 if needed
       - name: Select Xcode (prefer 16.2, fallback 15.4)
         run: |
+          set -e
           if [ -d "/Applications/Xcode_16.2.app" ]; then
             sudo xcode-select -s /Applications/Xcode_16.2.app
+            echo "Using Xcode 16.2"
           elif [ -d "/Applications/Xcode_15.4.app" ]; then
             sudo xcode-select -s /Applications/Xcode_15.4.app
+            echo "Using Xcode 15.4"
+          else
+            echo "Using default Xcode:"
+            xcode-select -p
           fi
           xcodebuild -version
 
-      - name: Debug – list files
+      - name: Debug — list files
         run: |
           pwd
           ls -la
-          echo "----- SmartwatchApp dir -----"
+          echo "---- SmartwatchApp ----"
           ls -la SmartwatchApp || true
+          echo "---- Sources ----"
+          ls -la SmartwatchApp/Sources || true
+          echo "---- Resources ----"
+          ls -la SmartwatchApp/Resources || true
 
-      - name: Show bundle id values
-        run: |
-          echo "Bundle id expected: com.546prints.smartwatchapp"
-          echo "Info.plist path   : SmartwatchApp/Resources/Info.plist"
-
-      # --- Generate the Xcode project ---
       - name: Install XcodeGen
         run: |
           brew update
@@ -42,42 +53,41 @@ jobs:
 
       - name: Debug — show project.yml
         run: |
-          echo "----- project.yml -----"
+          test -f SmartwatchApp/project.yml || (echo "SmartwatchApp/project.yml missing" && exit 1)
           sed -n '1,200p' SmartwatchApp/project.yml
 
       - name: Generate Xcode project from project.yml
         run: |
-          test -f SmartwatchApp/project.yml
           xcodegen generate --spec SmartwatchApp/project.yml
-          echo "----- generated root -----"
-          ls -la
-          echo "----- SmartwatchApp dir after generate -----"
-          ls -la SmartwatchApp
+          ls -la SmartwatchApp/SmartwatchApp.xcodeproj
 
-      # --- Build WITHOUT code signing (for archive only) ---
       - name: Build (archive) WITHOUT code signing
         run: |
+          set -e
           mkdir -p output
           xcodebuild \
-            -project SmartwatchApp/SmartwatchApp.xcodeproj \
-            -scheme SmartwatchApp \
+            -project "$APP_PROJECT" \
+            -scheme "$APP_SCHEME" \
             -configuration Release \
-            -sdk iphones \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
+            -sdk iphoneos \
+            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
+            INFOPLIST_FILE="$APP_INFO_PLIST" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             -archivePath output/App.xcarchive \
             clean archive
 
       - name: Create unsigned IPA
         run: |
-          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
+          set -e
+          APP_PATH="output/App.xcarchive/Products/Applications/${APP_SCHEME}.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "App not found at $APP_PATH"
+            find output -maxdepth 4 -type d -print
             exit 1
           fi
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -y -r SmartwatchApp-unsigned.ipa Payload
+          /usr/bin/zip -qry SmartwatchApp-unsigned.ipa Payload
           rm -rf Payload
 
       - name: Upload IPA artifact
@@ -85,3 +95,4 @@ jobs:
         with:
           name: SmartwatchApp-unsigned
           path: SmartwatchApp-unsigned.ipa
+          if-no-files-found: error
