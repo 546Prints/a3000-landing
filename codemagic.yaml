@@ -11,10 +11,31 @@ workflows:
           set -e
           echo "PWD: $(pwd)"
           ls -la
-          echo "---- SmartwatchApp dir ----"
+          echo "---- SmartwatchApp dir (top) ----"
           ls -la SmartwatchApp || true
           echo "---- SmartwatchApp recursive ----"
           ls -R SmartwatchApp || true
+
+      - name: Install XcodeGen (if missing)
+        script: |
+          set -e
+          if command -v xcodegen >/dev/null 2>&1; then
+            echo "XcodeGen already installed: $(xcodegen --version)"
+          else
+            echo "Installing XcodeGen via Homebrew..."
+            brew update
+            brew install xcodegen
+            xcodegen --version
+          fi
+
+      - name: Generate Xcode project from project.yml
+        script: |
+          set -e
+          test -f SmartwatchApp/project.yml
+          # Generate .xcodeproj into SmartwatchApp folder
+          (cd SmartwatchApp && xcodegen generate)
+          # Show generated project file
+          ls -la SmartwatchApp/SmartwatchApp.xcodeproj
 
       - name: List Xcode targets & schemes
         script: |
