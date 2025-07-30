@@ -16,25 +16,22 @@ workflows:
           echo "---- SmartwatchApp recursive ----"
           ls -R SmartwatchApp || true
 
-      - name: Install XcodeGen (if missing)
+      - name: Fetch XcodeGen binary and generate project (no brew)
         script: |
-          set -e
-          if command -v xcodegen >/dev/null 2>&1; then
-            echo "XcodeGen already installed: $(xcodegen --version)"
-          else
-            echo "Installing XcodeGen via Homebrew..."
-            brew update
-            brew install xcodegen
-            xcodegen --version
-          fi
-
-      - name: Generate Xcode project from project.yml
-        script: |
-          set -e
-          test -f SmartwatchApp/project.yml
-          # Generate .xcodeproj into SmartwatchApp folder
-          (cd SmartwatchApp && xcodegen generate)
-          # Show generated project file
+          set -euo pipefail
+          XG_VER="2.41.0"
+          XG_DIR="$CM_BUILD_DIR/tools"
+          mkdir -p "$XG_DIR"
+          echo "Downloading XcodeGen ${XG_VER}…"
+          curl -L -o "$XG_DIR/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/${XG_VER}/xcodegen.zip"
+          unzip -q "$XG_DIR/xcodegen.zip" -d "$XG_DIR"
+          XG_BIN="$XG_DIR/xcodegen"
+          chmod +x "$XG_BIN"
+          echo "XcodeGen at: $XG_BIN"
+          "$XG_BIN" --version
+          echo "Generating Xcode project from SmartwatchApp/project.yml…"
+          (cd SmartwatchApp && "$XG_BIN" generate)
+          echo "Result:"
           ls -la SmartwatchApp/SmartwatchApp.xcodeproj
 
       - name: List Xcode targets & schemes
