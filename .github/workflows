@@ -1,1 +1,73 @@
+name: Build iOS App (unsigned)
 
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode (prefer 16.2, fallback 15.4)
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+            xcodebuild -version
+          else
+            sudo xcode-select -s /Applications/Xcode_15.4.app
+            xcodebuild -version
+          fi
+
+      - name: Install XcodeGen
+        run: |
+          brew update
+          brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: |
+          test -f SmartwatchApp/project.yml
+          xcodegen generate --spec SmartwatchApp/project.yml
+
+      - name: Debug – list files
+        run: |
+          pwd
+          ls -la
+          echo "---- SmartwatchApp dir ----"
+          ls -la SmartwatchApp
+
+      - name: Build (archive) WITHOUT code signing
+        run: |
+          mkdir -p output
+          xcodebuild \
+            -project SmartwatchApp.xcodeproj \
+            -scheme SmartwatchApp \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            PRODUCT_BUNDLE_IDENTIFIER=com.546prints.smartwatchapp \
+            INFOPLIST_FILE=SmartwatchApp/Info.plist \
+            -archivePath output/App.xcarchive \
+            clean archive
+
+      - name: Create unsigned IPA
+        run: |
+          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "App not found at $APP_PATH"; ls -R output || true; exit 1
+          fi
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          cd Payload && zip -qry ../SmartwatchApp-unsigned.ipa . && cd ..
+          rm -rf Payload
+          echo "IPA created at SmartwatchApp-unsigned.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartwatchApp-unsigned
+          path: SmartwatchApp-unsigned.ipa
