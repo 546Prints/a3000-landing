@@ -1,0 +1,40 @@
+workflows:
+  ios_unsigned:
+    name: iOS unsigned build
+    max_build_duration: 60
+    environment:
+      xcode: 16.2
+    scripts:
+      - name: Build archive without signing
+        script: |
+          set -e
+          xcodebuild \
+            -project SmartwatchApp/SmartwatchApp.xcodeproj \
+            -scheme SmartwatchApp \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            archive -archivePath $CM_BUILD_DIR/App.xcarchive
+      - name: Export unsigned IPA
+        script: |
+          set -e
+          cat > ExportOptions.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>compileBitcode</key><false/>
+          </dict>
+          </plist>
+          EOF
+          # Try export; allow it to continue even if export fails due to unsigned archive
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/App.xcarchive \
+            -exportPath $CM_BUILD_DIR/ipa \
+            -exportOptionsPlist ExportOptions.plist || true
+    artifacts:
+      - $CM_BUILD_DIR/ipa/*.ipa
+      - ipa/*.ipa
