@@ -16,22 +16,49 @@ workflows:
           echo "---- SmartwatchApp recursive ----"
           ls -R SmartwatchApp || true
 
-      - name: Fetch XcodeGen binary and generate project (no brew)
+       - name: Fetch XcodeGen binary and generate project (no brew)
         script: |
           set -euo pipefail
           XG_VER="2.41.0"
-          XG_DIR="$CM_BUILD_DIR/tools"
+          XG_DIR="$CM_BUILD_DIR/tools/xcodegen"
           mkdir -p "$XG_DIR"
           echo "Downloading XcodeGen ${XG_VER}…"
-          curl -L -o "$XG_DIR/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/${XG_VER}/xcodegen.zip"
+          curl -L --fail -o "$XG_DIR/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/${XG_VER}/xcodegen.zip"
+
+          echo "Unzipping…"
           unzip -q "$XG_DIR/xcodegen.zip" -d "$XG_DIR"
-          XG_BIN="$XG_DIR/xcodegen"
+
+          echo "Tree under $XG_DIR:"
+          /usr/bin/find "$XG_DIR" -maxdepth 3 -print
+
+          # Try to locate the real executable
+          XG_BIN=$(/usr/bin/find "$XG_DIR" -type f -name 'xcodegen' -perm -111 -print -quit || true)
+
+          if [ -z "${XG_BIN:-}" ]; then
+            echo "Could not find an executable named 'xcodegen'. Showing candidates:"
+            /usr/bin/find "$XG_DIR" -type f -name 'xcodegen' -print || true
+            echo "Failing early."
+            exit 127
+          fi
+
+          echo "Candidate binary: $XG_BIN"
+          echo "file(1) says:"
+          file "$XG_BIN" || true
+
+          echo "Removing quarantine (if any)…"
+          xattr -dr com.apple.quarantine "$XG_BIN" || true
+
+          echo "Ensuring +x…"
           chmod +x "$XG_BIN"
-          echo "XcodeGen at: $XG_BIN"
+
+          echo "arch is: $(arch)"
+          echo "Running: $XG_BIN --version"
           "$XG_BIN" --version
+
           echo "Generating Xcode project from SmartwatchApp/project.yml…"
           (cd SmartwatchApp && "$XG_BIN" generate)
-          echo "Result:"
+
+          echo "Resulting project:"
           ls -la SmartwatchApp/SmartwatchApp.xcodeproj
 
       - name: List Xcode targets & schemes
