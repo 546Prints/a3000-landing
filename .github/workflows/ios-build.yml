@@ -71,7 +71,7 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
-            INFOPLIST_FILE="$APP_INFO_PLIST" \
+            
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             -archivePath output/App.xcarchive \
             clean archive
