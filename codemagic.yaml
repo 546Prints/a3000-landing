@@ -11,12 +11,12 @@ workflows:
           set -e
           echo "PWD: $(pwd)"
           ls -la
-          echo "---- SmartwatchApp dir (top) ----"
+          echo "----- SmartwatchApp dir (shallow) -----"
           ls -la SmartwatchApp || true
-          echo "---- SmartwatchApp recursive ----"
+          echo "----- SmartwatchApp (recursive) -----"
           ls -R SmartwatchApp || true
 
-       - name: Fetch XcodeGen binary and generate project (no brew)
+      - name: Fetch XcodeGen binary and generate project (no brew)
         script: |
           set -euo pipefail
           XG_VER="2.41.0"
@@ -31,13 +31,11 @@ workflows:
           echo "Tree under $XG_DIR:"
           /usr/bin/find "$XG_DIR" -maxdepth 3 -print
 
-          # Try to locate the real executable
+          # Locate the executable
           XG_BIN=$(/usr/bin/find "$XG_DIR" -type f -name 'xcodegen' -perm -111 -print -quit || true)
-
           if [ -z "${XG_BIN:-}" ]; then
-            echo "Could not find an executable named 'xcodegen'. Showing candidates:"
+            echo "Could not find an executable named 'xcodegen'. Candidates:"
             /usr/bin/find "$XG_DIR" -type f -name 'xcodegen' -print || true
-            echo "Failing early."
             exit 127
           fi
 
@@ -45,10 +43,10 @@ workflows:
           echo "file(1) says:"
           file "$XG_BIN" || true
 
-          echo "Removing quarantine (if any)…"
+          echo "Remove quarantine (if any)…"
           xattr -dr com.apple.quarantine "$XG_BIN" || true
 
-          echo "Ensuring +x…"
+          echo "Ensure +x…"
           chmod +x "$XG_BIN"
 
           echo "arch is: $(arch)"
@@ -69,26 +67,37 @@ workflows:
       - name: Build archive WITHOUT code signing
         script: |
           set -e
+          mkdir -p output
           xcodebuild \
             -project SmartwatchApp/SmartwatchApp.xcodeproj \
             -scheme SmartwatchApp \
             -configuration Release \
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            archive -archivePath $CM_BUILD_DIR/App.xcarchive
+            -archivePath output/App.xcarchive \
+            clean archive
 
       - name: Package .app (unsigned) as zip
         script: |
           set -e
-          APP="$CM_BUILD_DIR/App.xcarchive/Products/Applications/SmartwatchApp.app"
-          if [ -d "$APP" ]; then
-            cd "$(dirname "$APP")"
-            zip -r "$CM_ARTIFACTS/SmartwatchApp-unsigned-app.zip" "SmartwatchApp.app"
-          else
-            echo "App bundle not found at $APP"
+          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "App not found at $APP_PATH"
+            ls -R output || true
             exit 1
           fi
+          /usr/bin/zip -r9 "SmartwatchApp-unsigned.zip" "$APP_PATH"
+          echo "Created SmartwatchApp-unsigned.zip"
 
     artifacts:
-      - $CM_BUILD_DIR/App.xcarchive
-      - $CM_ARTIFACTS/SmartwatchApp-unsigned-app.zip
+      - output/App.xcarchive/**/*
+      - SmartwatchApp-unsigned.zip
+
+    publishing:
+      scripts:
+        - name: Show artifact locations
+          script: |
+            echo "Artifacts in repository root:"
+            ls -la SmartwatchApp-unsigned.zip || true
+            echo "Artifacts under output/:"
+            ls -la output || true
