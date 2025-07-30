@@ -1,32 +1,32 @@
 name: SmartwatchApp
+
 options:
-  minimumXcodeGenVersion: 2.37.0
-  deploymentTarget:
-    iOS: "15.0"
+  bundleIdPrefix: com.546prints
+
+configs:
+  Debug: debug
+  Release: release
 
 settings:
-  base:
-    PRODUCT_BUNDLE_IDENTIFIER: com.546prints.smartwatchapp
-    INFOPLIST_FILE: SmartwatchApp/Resources/Info.plist
-    SWIFT_VERSION: 5.9
-    TARGETED_DEVICE_FAMILY: "1"
-    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+  IPHONEOS_DEPLOYMENT_TARGET: 15.0
+  TARGETED_DEVICE_FAMILY: 1    # iPhone
+  SWIFT_VERSION: 5.0
 
 targets:
   SmartwatchApp:
     type: application
     platform: iOS
+    deploymentTarget: "15.0"
     sources:
-      - path: SmartwatchApp/Sources
+      - path: Sources
+        excludes:
+          - "**/*.plist"
+          - "**/*.storyboard"
     resources:
-      - path: SmartwatchApp/Resources
+      - path: Resources
     settings:
-      base:
-        PRODUCT_NAME: SmartwatchApp
-        INFOPLIST_FILE: SmartwatchApp/Resources/Info.plist
-        CODE_SIGN_STYLE: Manual
-        DEVELOPMENT_TEAM: ""
-        PROVISIONING_PROFILE_SPECIFIER: ""
+      PRODUCT_BUNDLE_IDENTIFIER: com.546prints.smartwatchapp
+      INFOPLIST_FILE: Resources/Info.plist
     scheme:
       name: SmartwatchApp
       testTargets: []
