@@ -1,20 +1,29 @@
-name: Build iOS App (unsigned)
+name: Build iOS App (Ad Hoc)
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-13   # works with current Apple toolchain on Actions
+
+    env:
+      PROJECT_PATH: SmartwatchApp/SmartwatchApp.xcodeproj
+      SCHEME: SmartwatchApp
+      CONFIGURATION: Release
+      ARCHIVE_PATH: output/App.xcarchive
+      EXPORT_PATH: output
+      # These come from GitHub Secrets:
+      TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Select Xcode (prefer 16.2, fallback 15.4)
-        shell: bash
         run: |
           if [ -d "/Applications/Xcode_16.2.app" ]; then
             sudo xcode-select -s /Applications/Xcode_16.2.app
@@ -23,62 +32,83 @@ jobs:
           fi
           xcodebuild -version
 
-      - name: Debug — list files
+      # ---------- Install signing assets (certificate + profile) ----------
+      - name: Create keychain and import .p12
+        shell: bash
         run: |
-          pwd
-          ls -la
-          echo "----- SmartwatchApp dir -----"
-          ls -la SmartwatchApp
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          echo "${{ secrets.IOS_P12_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "${{ secrets.IOS_P12_PASSWORD }}" -T /usr/bin/codesign -A
+          security list-keychains -d user -s "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN"
 
-      - name: Install XcodeGen
+      - name: Install provisioning profile
+        shell: bash
         run: |
-          brew update
-          brew install xcodegen
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "${{ secrets.IOS_MOBILEPROVISION_BASE64 }}" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/adhoc.mobileprovision"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles"
 
-      - name: Debug — show project.yml
+      # ---------- Build & Archive (with signing) ----------
+      - name: Archive
+        shell: bash
         run: |
-          cat SmartwatchApp/project.yml || true
-
-      - name: Generate Xcode project from project.yml
-        run: |
-          test -f SmartwatchApp/project.yml
-          xcodegen generate --spec SmartwatchApp/project.yml
-
-      - name: Build (archive) WITHOUT code signing
-        run: |
-          set -e
           mkdir -p output
           xcodebuild \
-            -project SmartwatchApp/SmartwatchApp.xcodeproj \
-            -scheme SmartwatchApp \
-            -configuration Release \
+            -project "$PROJECT_PATH" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
             -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            PRODUCT_BUNDLE_IDENTIFIER=com.546prints.smartwatchapp \
-            INFOPLIST_FILE=Resources/Info.plist \
+            -archivePath "$ARCHIVE_PATH" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            -archivePath output/App.xcarchive \
-            clean archive
+            clean archive | xcpretty
 
-      - name: Create unsigned IPA
+      # ---------- Export IPA (Ad Hoc) ----------
+      - name: Create ExportOptions.plist (Ad Hoc)
+        shell: bash
         run: |
-          set -e
-          APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "App not found at $APP_PATH"
-            exit 1
-          fi
-          mkdir -p output/Payload
-          cp -R "$APP_PATH" output/Payload/
-          (cd output && zip -r SmartwatchApp-unsigned.ipa Payload)
+          cat > ExportOptions.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>teamID</key>
+            <string>${TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>destination</key>
+            <string>export</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${BUNDLE_ID}</key>
+              <string>AdHoc</string>
+            </dict>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Export IPA
+        shell: bash
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath "$EXPORT_PATH" | xcpretty
+          ls -la output
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartwatchApp-unsigned
-          path: output/SmartwatchApp-unsigned.ipa
+          name: SmartwatchApp-AdHoc-IPA
+          path: output/*.ipa
