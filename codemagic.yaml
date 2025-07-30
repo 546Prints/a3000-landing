@@ -4,22 +4,21 @@ workflows:
     max_build_duration: 60
     environment:
       xcode: 16.2
-
     scripts:
       - name: Debug — show files
         script: |
           set -e
           echo "PWD: $(pwd)"
           ls -la
-          echo "----- SmartwatchApp dir (shallow) -----"
+          echo "----- SmartwatchApp dir -----"
           ls -la SmartwatchApp || true
-          echo "----- SmartwatchApp (recursive) -----"
+          echo "----- SmartwatchApp recursive -----"
           ls -R SmartwatchApp || true
 
       - name: Fetch XcodeGen binary and generate project (no brew)
         script: |
           set -euo pipefail
-          XG_VER="2.41.0"
+          XG_VER="2.42.0"
           XG_DIR="$CM_BUILD_DIR/tools/xcodegen"
           mkdir -p "$XG_DIR"
           echo "Downloading XcodeGen ${XG_VER}…"
@@ -27,37 +26,14 @@ workflows:
 
           echo "Unzipping…"
           unzip -q "$XG_DIR/xcodegen.zip" -d "$XG_DIR"
+          # the zip contains a single 'xcodegen' executable
+          chmod +x "$XG_DIR/xcodegen"
 
-          echo "Tree under $XG_DIR:"
-          /usr/bin/find "$XG_DIR" -maxdepth 3 -print
-
-          # Locate the executable
-          XG_BIN=$(/usr/bin/find "$XG_DIR" -type f -name 'xcodegen' -perm -111 -print -quit || true)
-          if [ -z "${XG_BIN:-}" ]; then
-            echo "Could not find an executable named 'xcodegen'. Candidates:"
-            /usr/bin/find "$XG_DIR" -type f -name 'xcodegen' -print || true
-            exit 127
-          fi
-
-          echo "Candidate binary: $XG_BIN"
-          echo "file(1) says:"
-          file "$XG_BIN" || true
-
-          echo "Remove quarantine (if any)…"
-          xattr -dr com.apple.quarantine "$XG_BIN" || true
-
-          echo "Ensure +x…"
-          chmod +x "$XG_BIN"
-
-          echo "arch is: $(arch)"
-          echo "Running: $XG_BIN --version"
-          "$XG_BIN" --version
+          echo "XcodeGen version:"
+          "$XG_DIR/xcodegen" --version
 
           echo "Generating Xcode project from SmartwatchApp/project.yml…"
-          (cd SmartwatchApp && "$XG_BIN" generate)
-
-          echo "Resulting project:"
-          ls -la SmartwatchApp/SmartwatchApp.xcodeproj
+          "$XG_DIR/xcodegen" generate --spec SmartwatchApp/project.yml
 
       - name: List Xcode targets & schemes
         script: |
@@ -81,23 +57,12 @@ workflows:
         script: |
           set -e
           APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
-          if [ ! -d "$APP_PATH" ]; then
+          if [ -d "$APP_PATH" ]; then
+            ditto -ck --sequesterRsrc --keepParent "$APP_PATH" output/SmartwatchApp-unsigned.zip
+          else
             echo "App not found at $APP_PATH"
-            ls -R output || true
             exit 1
           fi
-          /usr/bin/zip -r9 "SmartwatchApp-unsigned.zip" "$APP_PATH"
-          echo "Created SmartwatchApp-unsigned.zip"
 
     artifacts:
-      - output/App.xcarchive/**/*
-      - SmartwatchApp-unsigned.zip
-
-    publishing:
-      scripts:
-        - name: Show artifact locations
-          script: |
-            echo "Artifacts in repository root:"
-            ls -la SmartwatchApp-unsigned.zip || true
-            echo "Artifacts under output/:"
-            ls -la output || true
+      - output/SmartwatchApp-unsigned.zip
