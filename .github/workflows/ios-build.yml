@@ -1,19 +1,16 @@
-name: Build iOS App (unsigned)
+name: Build iOS App (Unsigned + Ad Hoc)
 
 on:
+  workflow_dispatch: {}
   push:
     branches: [ main ]
-  workflow_dispatch: {}
 
 jobs:
-  build:
-    name: build
+  unsigned:
+    name: Build Unsigned .app
     runs-on: macos-14
     timeout-minutes: 30
-
     env:
-      # Adjust these if your paths/names differ
-      PROJECT_DIR: SmartwatchApp
       PROJECT_FILE: SmartwatchApp/SmartwatchApp.xcodeproj
       SCHEME: SmartwatchApp
       CONFIGURATION: Release
@@ -23,88 +20,110 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode (prefer 16.2, fallback 15.4)
-        shell: bash
+      - name: Select Xcode
         run: |
-          set -euo pipefail
           if [ -d "/Applications/Xcode_16.2.app" ]; then
             sudo xcode-select -s /Applications/Xcode_16.2.app
           else
             sudo xcode-select -s /Applications/Xcode_15.4.app
           fi
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
 
-      - name: Debug — list files
-        shell: bash
+      - name: Build without code signing
         run: |
-          set -euo pipefail
-          echo "PWD: $(pwd)"
-          ls -la
-          echo "---- ${PROJECT_DIR} dir ----"
-          ls -la "${PROJECT_DIR}" || true
-          echo "---- recursive tree ----"
-          ls -R "${PROJECT_DIR}" || true
-
-      # If you have SmartwatchApp/project.yml and want to (re)generate the xcodeproj, keep this step.
-      # If you do NOT use XcodeGen, you can safely delete this step.
-      - name: Install XcodeGen (optional)
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! command -v xcodegen >/dev/null 2>&1; then
-            brew update
-            brew install xcodegen
-          fi
-          xcodegen --version
-
-      - name: Generate Xcode project from project.yml (optional)
-        if: ${{ hashFiles('SmartwatchApp/project.yml') != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f SmartwatchApp/project.yml
-          xcodegen generate --spec SmartwatchApp/project.yml
-          echo "Generated files:"
-          ls -la SmartwatchApp
-
-      - name: List Xcode targets & schemes
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "=== xcodebuild -list (project) ==="
-          xcodebuild -list -project "${PROJECT_FILE}" || true
-
-      - name: Build (archive) WITHOUT code signing
-        shell: bash
-        run: |
-          set -euo pipefail
           mkdir -p output
           xcodebuild \
             -project "${PROJECT_FILE}" \
             -scheme "${SCHEME}" \
             -configuration "${CONFIGURATION}" \
             -sdk "${SDK}" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
             archive -archivePath output/App.xcarchive
 
-      - name: Package .app (unsigned) as zip
-        shell: bash
+      - name: Package .app as zip
         run: |
-          set -euo pipefail
           APP_PATH="output/App.xcarchive/Products/Applications/${SCHEME}.app"
-          if [ ! -d "${APP_PATH}" ]; then
-            echo "Could not find app at: ${APP_PATH}"
-            exit 1
-          fi
-          pushd "$(dirname "${APP_PATH}")" >/dev/null
+          cd "$(dirname "${APP_PATH}")"
           zip -ry "${GITHUB_WORKSPACE}/output/${SCHEME}.zip" "$(basename "${APP_PATH}")"
-          popd >/dev/null
-          echo "Zipped app at output/${SCHEME}.zip"
 
-      - name: Upload artifact (.app zip)
+      - name: Upload unsigned artifact
         uses: actions/upload-artifact@v4
         with:
-          name: unsigned-app-zip
+          name: Unsigned-App
           path: output/${{ env.SCHEME }}.zip
-          if-no-files-found: error
+
+
+  ad_hoc:
+    name: Build Signed Ad Hoc IPA
+    runs-on: macos-14
+    needs: unsigned
+    timeout-minutes: 30
+    env:
+      PROJECT_FILE: SmartwatchApp/SmartwatchApp.xcodeproj
+      SCHEME: SmartwatchApp
+      CONFIGURATION: Release
+      SDK: iphoneos
+      EXPORT_METHOD: ad-hoc
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+          else
+            sudo xcode-select -s /Applications/Xcode_15.4.app
+          fi
+
+      - name: Create keychain and import .p12
+        run: |
+          echo "$P12_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security import certificate.p12 -k ~/Library/Keychains/build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -s ~/Library/Keychains/build.keychain
+          security unlock-keychain -p "" ~/Library/Keychains/build.keychain
+        env:
+          P12_BASE64: ${{ secrets.P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+
+      - name: Install provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > profile.mobileprovision
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+
+      - name: Archive (signed)
+        run: |
+          mkdir -p output
+          xcodebuild \
+            -project "${PROJECT_FILE}" \
+            -scheme "${SCHEME}" \
+            -configuration "${CONFIGURATION}" \
+            -sdk "${SDK}" \
+            -allowProvisioningUpdates \
+            archive -archivePath output/App.xcarchive
+
+      - name: Export IPA
+        run: |
+          cat > ExportOptions.plist <<EOF
+          {
+            "method": "${EXPORT_METHOD}",
+            "provisioningProfiles": { "com.example.SmartwatchApp": "ProvisioningProfileName" },
+            "signingStyle": "manual",
+            "compileBitcode": false
+          }
+          EOF
+          xcodebuild \
+            -exportArchive \
+            -archivePath output/App.xcarchive \
+            -exportPath output \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ad-Hoc-IPA
+          path: output/*.ipa
