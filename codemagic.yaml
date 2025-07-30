@@ -5,44 +5,44 @@ workflows:
     environment:
       xcode: 16.2
     scripts:
+      # --- Debug: show what Codemagic checked out
       - name: Debug — show files
         script: |
-          set -e
+          set -euxo pipefail
           echo "PWD: $(pwd)"
           ls -la
-          echo "----- SmartwatchApp dir -----"
+          echo "----- SmartwatchApp dir (top) -----"
           ls -la SmartwatchApp || true
-          echo "----- SmartwatchApp recursive -----"
+          echo "----- SmartwatchApp (recursive) -----"
           ls -R SmartwatchApp || true
 
-      - name: Fetch XcodeGen binary and generate project (no brew)
+      # --- Fetch XcodeGen >= 2.42.0 and generate .xcodeproj
+      - name: Fetch XcodeGen 2.42.1 and generate project
         script: |
-          set -euo pipefail
-          XG_VER="2.42.0"
+          set -euxo pipefail
+          XG_VER="2.42.1"
           XG_DIR="$CM_BUILD_DIR/tools/xcodegen"
           mkdir -p "$XG_DIR"
-          echo "Downloading XcodeGen ${XG_VER}…"
-          curl -L --fail -o "$XG_DIR/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/${XG_VER}/xcodegen.zip"
-
-          echo "Unzipping…"
+          curl -L --fail -o "$XG_DIR/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/$XG_VER/xcodegen.zip"
           unzip -q "$XG_DIR/xcodegen.zip" -d "$XG_DIR"
-          # the zip contains a single 'xcodegen' executable
           chmod +x "$XG_DIR/xcodegen"
-
-          echo "XcodeGen version:"
           "$XG_DIR/xcodegen" --version
 
-          echo "Generating Xcode project from SmartwatchApp/project.yml…"
+          # Generate project from your spec
+          test -f SmartwatchApp/project.yml
           "$XG_DIR/xcodegen" generate --spec SmartwatchApp/project.yml
 
+      # --- List schemes/targets Codemagic detects (great for troubleshooting)
       - name: List Xcode targets & schemes
         script: |
-          set -e
+          set -euxo pipefail
           xcodebuild -list -project SmartwatchApp/SmartwatchApp.xcodeproj
 
+      # --- Build archive WITHOUT code signing
       - name: Build archive WITHOUT code signing
         script: |
-          set -e
+          set -euxo pipefail
           mkdir -p output
           xcodebuild \
             -project SmartwatchApp/SmartwatchApp.xcodeproj \
@@ -50,19 +50,20 @@ workflows:
             -configuration Release \
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            -archivePath output/App.xcarchive \
-            clean archive
+            archive -archivePath output/App.xcarchive
 
+      # --- Package the .app as a zip to download
       - name: Package .app (unsigned) as zip
         script: |
-          set -e
+          set -euxo pipefail
           APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
-          if [ -d "$APP_PATH" ]; then
-            ditto -ck --sequesterRsrc --keepParent "$APP_PATH" output/SmartwatchApp-unsigned.zip
-          else
-            echo "App not found at $APP_PATH"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Expected app not found at: $APP_PATH"
+            echo "Contents of archive:"
+            find output -maxdepth 4 -type d -print
             exit 1
           fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" SmartwatchApp-unsigned.zip
 
     artifacts:
-      - output/SmartwatchApp-unsigned.zip
+      - SmartwatchApp-unsigned.zip
