@@ -1,1 +1,20 @@
-
+name: SmartwatchApp
+options:
+  minimumXcodeGenVersion: 2.37.0
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  SmartwatchApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        type: folder
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.546prints.smartwatchapp
+      INFOPLIST_FILE: Resources/Info.plist
+      SWIFT_VERSION: 5.9
+      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    scheme:
+      testTargets: []
