@@ -5,7 +5,6 @@ workflows:
     environment:
       xcode: 16.2
     scripts:
-      # --- Debug: show what Codemagic checked out
       - name: Debug — show files
         script: |
           set -euxo pipefail
@@ -16,30 +15,51 @@ workflows:
           echo "----- SmartwatchApp (recursive) -----"
           ls -R SmartwatchApp || true
 
-      # --- Fetch XcodeGen >= 2.42.0 and generate .xcodeproj
+      # === More robust XcodeGen step (retry + fallback to Homebrew) ===
       - name: Fetch XcodeGen 2.42.1 and generate project
         script: |
           set -euxo pipefail
           XG_VER="2.42.1"
           XG_DIR="$CM_BUILD_DIR/tools/xcodegen"
           mkdir -p "$XG_DIR"
-          curl -L --fail -o "$XG_DIR/xcodegen.zip" \
-            "https://github.com/yonaskolb/XcodeGen/releases/download/$XG_VER/xcodegen.zip"
-          unzip -q "$XG_DIR/xcodegen.zip" -d "$XG_DIR"
-          chmod +x "$XG_DIR/xcodegen"
-          "$XG_DIR/xcodegen" --version
 
-          # Generate project from your spec
-          test -f SmartwatchApp/project.yml
-          "$XG_DIR/xcodegen" generate --spec SmartwatchApp/project.yml
+          echo "Downloading XcodeGen ${XG_VER} (with retries)…"
+          # Retry on any error; 7 attempts, exponential backoff
+          if ! curl -L --fail --retry 7 --retry-all-errors --retry-delay 2 \
+              -o "$XG_DIR/xcodegen.zip" \
+              "https://github.com/yonaskolb/XcodeGen/releases/download/${XG_VER}/xcodegen.zip"; then
+            echo "Direct download failed; trying Homebrew fallback…"
+            # Homebrew path on Codemagic M-series images
+            if [ -x "/opt/homebrew/bin/brew" ]; then
+              /opt/homebrew/bin/brew update || true
+              /opt/homebrew/bin/brew install xcodegen || /opt/homebrew/bin/brew upgrade xcodegen || true
+              which xcodegen
+              xcodegen --version
+              USE_BREW=1
+            else
+              echo "Homebrew not available at /opt/homebrew/bin/brew"; exit 1
+            fi
+          fi
 
-      # --- List schemes/targets Codemagic detects (great for troubleshooting)
+          if [ "${USE_BREW:-0}" = "1" ]; then
+            echo "Generating project with Homebrew XcodeGen…"
+            test -f SmartwatchApp/project.yml
+            xcodegen generate --spec SmartwatchApp/project.yml
+          else
+            echo "Unzipping XcodeGen…"
+            unzip -q "$XG_DIR/xcodegen.zip" -d "$XG_DIR"
+            chmod +x "$XG_DIR/xcodegen"
+            "$XG_DIR/xcodegen" --version
+            echo "Generating project from SmartwatchApp/project.yml…"
+            test -f SmartwatchApp/project.yml
+            "$XG_DIR/xcodegen" generate --spec SmartwatchApp/project.yml
+          fi
+
       - name: List Xcode targets & schemes
         script: |
           set -euxo pipefail
           xcodebuild -list -project SmartwatchApp/SmartwatchApp.xcodeproj
 
-      # --- Build archive WITHOUT code signing
       - name: Build archive WITHOUT code signing
         script: |
           set -euxo pipefail
@@ -52,15 +72,14 @@ workflows:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             archive -archivePath output/App.xcarchive
 
-      # --- Package the .app as a zip to download
       - name: Package .app (unsigned) as zip
         script: |
           set -euxo pipefail
           APP_PATH="output/App.xcarchive/Products/Applications/SmartwatchApp.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "Expected app not found at: $APP_PATH"
-            echo "Contents of archive:"
-            find output -maxdepth 4 -type d -print
+            echo "Archive tree for debugging:"
+            find output -maxdepth 4 -print
             exit 1
           fi
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" SmartwatchApp-unsigned.zip
